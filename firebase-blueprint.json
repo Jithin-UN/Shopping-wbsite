@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A dress product in the store",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "description": { "type": "string", "description": "Product description" },
+        "price": { "type": "number", "description": "Product price" },
+        "category": { "type": "string", "description": "Product category (e.g., Casual, Formal, Party)" },
+        "imageUrl": { "type": "string", "description": "URL to product image" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "price", "category", "imageUrl"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "favorites": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Store settings",
+      "type": "object",
+      "properties": {
+        "freeOrdersCount": { "type": "number" },
+        "freeShippingThreshold": { "type": "number" }
+      },
+      "required": ["freeOrdersCount", "freeShippingThreshold"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "shipped"] },
+        "shippingAddress": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "items", "totalAmount", "status", "shippingAddress"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store products"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Store settings"
+    }
+  }
+}
