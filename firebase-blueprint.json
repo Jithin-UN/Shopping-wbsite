@@ -5,55 +5,73 @@
       "description": "A dress product in the store",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "description": "Product name" },
-        "description": { "type": "string", "description": "Product description" },
-        "price": { "type": "number", "description": "Product price" },
-        "category": { "type": "string", "description": "Product category (e.g., Casual, Formal, Party)" },
-        "imageUrl": { "type": "string", "description": "URL to product image" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name", "price", "category", "imageUrl"]
-    },
-    "User": {
-      "title": "User",
-      "description": "User profile information",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "admin"] },
-        "address": { "type": "string" },
-        "phone": { "type": "string" },
-        "favorites": { "type": "array", "items": { "type": "string" } },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "stock": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "role"]
-    },
-    "Settings": {
-      "title": "Settings",
-      "description": "Store settings",
-      "type": "object",
-      "properties": {
-        "freeOrdersCount": { "type": "number" },
-        "freeShippingThreshold": { "type": "number" }
-      },
-      "required": ["freeOrdersCount", "freeShippingThreshold"]
+      "required": ["name", "price", "category", "imageUrl", "stock"]
     },
     "Order": {
       "title": "Order",
       "description": "A customer order",
       "type": "object",
       "properties": {
+        "orderId": { "type": "string" },
         "userId": { "type": "string" },
-        "items": { "type": "array", "items": { "type": "object" } },
+        "items": { "type": "array" },
         "totalAmount": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "completed", "shipped"] },
-        "shippingAddress": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "processing", "shipped", "delivered", "completed", "cancelled"] },
+        "shippingDetails": { "type": "object" },
+        "paymentMethod": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "items", "totalAmount", "status", "shippingAddress"]
+      "required": ["orderId", "userId", "items", "totalAmount", "status", "shippingDetails"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "postalCode": { "type": "string" },
+        "phone": { "type": "string" },
+        "favorites": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "App-wide settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "freeOrdersCount": { "type": "number" },
+        "freeShippingThreshold": { "type": "number" }
+      }
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Newsletter subscriber",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "subscribedAt": { "type": "string", "format": "date-time" },
+        "verified": { "type": "boolean" },
+        "verificationToken": { "type": "string" }
+      },
+      "required": ["email", "subscribedAt", "verified"]
     }
   },
   "firestore": {
@@ -61,17 +79,21 @@
       "schema": "Product",
       "description": "Store products"
     },
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "User profiles"
-    },
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Customer orders"
     },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
     "/settings/{settingId}": {
-      "schema": "Settings",
-      "description": "Store settings"
+      "schema": "Setting",
+      "description": "App configuration"
+    },
+    "/subscribers/{email}": {
+      "schema": "Subscriber",
+      "description": "Newsletter subscribers"
     }
   }
 }

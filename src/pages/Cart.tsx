@@ -1,18 +1,23 @@
 import { Link } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
-import { CartItem } from '../types';
+import { CartItem, Product } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CartProps {
   cart: CartItem[];
+  products: Product[];
   updateQuantity: (productId: string, quantity: number) => void;
   removeFromCart: (productId: string) => void;
 }
 
-export default function Cart({ cart, updateQuantity, removeFromCart }: CartProps) {
+export default function Cart({ cart, products, updateQuantity, removeFromCart }: CartProps) {
   const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
   const shipping = subtotal > 1000 ? 0 : 50;
   const total = subtotal + shipping;
+
+  const getProductStock = (productId: string) => {
+    return products.find(p => p.id === productId)?.stock || 0;
+  };
 
   if (cart.length === 0) {
     return (
@@ -50,17 +55,24 @@ export default function Cart({ cart, updateQuantity, removeFromCart }: CartProps
                 exit={{ opacity: 0, x: -20 }}
                 className="flex flex-col sm:flex-row items-center p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="w-32 h-40 flex-shrink-0 rounded-xl overflow-hidden mb-4 sm:mb-0">
+                <Link to={`/product/${item.productId}`} className="w-32 h-40 flex-shrink-0 rounded-xl overflow-hidden mb-4 sm:mb-0 hover:opacity-90 transition-opacity">
                   <img
                     src={item.imageUrl}
                     alt={item.name}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
-                </div>
+                </Link>
                 <div className="sm:ml-8 flex-grow text-center sm:text-left">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{item.name}</h3>
-                  <p className="text-indigo-600 font-bold font-mono mb-6">₹{item.price.toLocaleString('en-IN')}</p>
+                  <Link to={`/product/${item.productId}`} className="hover:text-indigo-600 transition-colors">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{item.name}</h3>
+                  </Link>
+                  <div className="flex items-center space-x-3 mb-4">
+                    <p className="text-indigo-600 font-bold font-mono">₹{item.price.toLocaleString('en-IN')}</p>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">
+                      Stock: {getProductStock(item.productId)}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-center sm:justify-start space-x-4">
                     <div className="flex items-center bg-gray-50 rounded-xl p-1 border border-gray-100">
                       <button

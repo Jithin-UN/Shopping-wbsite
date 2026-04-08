@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, collection, query, orderBy, updateDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { doc, onSnapshot, collection, query, orderBy, updateDoc, setDoc } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { UserProfile, Product, CartItem } from './types';
 
 // Components
 import Navbar from './components/Navbar';
+import AuthModal from './components/AuthModal';
 import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop';
 
 // Pages
 import Home from './pages/Home';
@@ -20,27 +22,44 @@ import Signup from './pages/Signup';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Favorites from './pages/Favorites';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import ShippingPolicy from './pages/ShippingPolicy';
+import ReturnsExchanges from './pages/ReturnsExchanges';
+import FAQs from './pages/FAQs';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
+import Verify from './pages/Verify';
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMessage, setAuthModalMessage] = useState('');
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubProfile: (() => void) | null = null;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (firebaseUser) {
         // Fetch user profile
         const userDoc = doc(db, 'users', firebaseUser.uid);
-        const unsubProfile = onSnapshot(userDoc, (docSnap) => {
+        unsubProfile = onSnapshot(userDoc, (docSnap) => {
           const isAdminEmail = firebaseUser.email?.toLowerCase() === 'jithinullodi@gmail.com';
           if (docSnap.exists()) {
-            const data = docSnap.data() as UserProfile;
+            const data = docSnap.data();
             setUser({
               ...data,
-              role: isAdminEmail ? 'admin' : data.role
-            });
+              role: isAdminEmail ? 'admin' : data.role,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+            } as UserProfile);
           } else {
             // If profile doesn't exist yet (e.g. during signup), set basic info
             setUser({
@@ -51,26 +70,37 @@ export default function App() {
             });
           }
           setLoading(false);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
         });
-        return () => unsubProfile();
       } else {
         setUser(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   // Products Listener
   useEffect(() => {
     const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const productsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Product[];
+      const productsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt
+        };
+      }) as Product[];
       setProducts(productsData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
     return () => unsubscribe();
@@ -78,14 +108,27 @@ export default function App() {
 
   // Cart Management
   const addToCart = (product: Product) => {
+    if (!user) {
+      setAuthModalMessage('Please login to add items to your cart and start shopping.');
+      setIsAuthModalOpen(true);
+      return;
+    }
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.productId === product.id);
       if (existingItem) {
+        if (existingItem.quantity + 1 > product.stock) {
+          alert(`Only ${product.stock} units available in stock.`);
+          return prevCart;
+        }
         return prevCart.map(item =>
           item.productId === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
+      }
+      if (product.stock <= 0) {
+        alert("This product is currently out of stock.");
+        return prevCart;
       }
       return [...prevCart, {
         productId: product.id,
@@ -106,6 +149,13 @@ export default function App() {
       removeFromCart(productId);
       return;
     }
+
+    const product = products.find(p => p.id === productId);
+    if (product && quantity > product.stock) {
+      alert(`Only ${product.stock} units available in stock.`);
+      return;
+    }
+
     setCart(prevCart =>
       prevCart.map(item =>
         item.productId === productId ? { ...item, quantity } : item
@@ -116,7 +166,11 @@ export default function App() {
   const clearCart = () => setCart([]);
 
   const toggleFavorite = async (productId: string) => {
-    if (!user) return;
+    if (!user) {
+      setAuthModalMessage('Please login to save items to your favorites.');
+      setIsAuthModalOpen(true);
+      return;
+    }
     const favorites = user.favorites || [];
     const isFavorite = favorites.includes(productId);
     const newFavorites = isFavorite
@@ -124,11 +178,15 @@ export default function App() {
       : [...favorites, productId];
 
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        favorites: newFavorites
-      });
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        favorites: newFavorites,
+        createdAt: user.createdAt || new Date().toISOString()
+      }, { merge: true });
     } catch (error) {
-      console.error('Error updating favorites:', error);
+      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
     }
   };
 
@@ -144,8 +202,14 @@ export default function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <div className="flex flex-col min-h-screen bg-gray-50 font-sans">
         <Navbar user={user} cartCount={cartCount} />
+        <AuthModal 
+          isOpen={isAuthModalOpen} 
+          onClose={() => setIsAuthModalOpen(false)} 
+          message={authModalMessage} 
+        />
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={
@@ -184,12 +248,20 @@ export default function App() {
                 <Navigate to="/login" />
               )
             } />
-            <Route path="/cart" element={<Cart cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
+            <Route path="/cart" element={<Cart cart={cart} products={products} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
             <Route path="/checkout" element={user ? <Checkout cart={cart} user={user} clearCart={clearCart} /> : <Navigate to="/login" />} />
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
             <Route path="/signup" element={!user ? <Signup /> : <Navigate to="/" />} />
             <Route path="/profile" element={user ? <Profile user={user} /> : <Navigate to="/login" />} />
             <Route path="/admin" element={user?.role === 'admin' ? <Admin products={products} /> : <Navigate to="/" />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/shipping-policy" element={<ShippingPolicy />} />
+            <Route path="/returns-exchanges" element={<ReturnsExchanges />} />
+            <Route path="/faqs" element={<FAQs />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/verify" element={<Verify />} />
           </Routes>
         </main>
         <Footer />

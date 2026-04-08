@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, MapPin, Phone, Package, Clock, ChevronRight, ShoppingBag, LogOut, Mail, ShieldCheck, AlertCircle, Heart, ArrowRight, Building2, Landmark, Hash, Bell, CheckCircle2, Info, Truck, Trash2 } from 'lucide-react';
+import { User, MapPin, Phone, Package, Clock, ChevronRight, ShoppingBag, LogOut, Mail, ShieldCheck, AlertCircle, Heart, ArrowRight, Building2, Landmark, Hash, Bell, CheckCircle2, Info, Truck, Trash2, Download } from 'lucide-react';
 import { UserProfile, Order, Notification } from '../types';
-import { auth, db } from '../firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { signOut, sendEmailVerification } from 'firebase/auth';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { signOut, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { INDIAN_STATES } from '../constants';
@@ -25,6 +25,8 @@ export default function Profile({ user }: ProfileProps) {
   const [postalCode, setPostalCode] = useState(user.postalCode || '');
   const [phone, setPhone] = useState(user.phone || '');
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const [verificationError, setVerificationError] = useState('');
   const [cooldown, setCooldown] = useState(0);
@@ -39,6 +41,17 @@ export default function Profile({ user }: ProfileProps) {
     if (date.seconds) return new Date(date.seconds * 1000).toLocaleString();
     return new Date(date).toLocaleString();
   };
+
+  useEffect(() => {
+    if (!isEditing) {
+      setFullName(user.fullName || user.displayName || '');
+      setAddress(user.address || '');
+      setCity(user.city || '');
+      setState(user.state || '');
+      setPostalCode(user.postalCode || '');
+      setPhone(user.phone || '');
+    }
+  }, [user, isEditing]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -77,11 +90,18 @@ export default function Profile({ user }: ProfileProps) {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Order[];
+      const ordersData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+        };
+      }) as Order[];
       setOrders(ordersData);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'orders');
       setLoading(false);
     });
 
@@ -100,25 +120,80 @@ export default function Profile({ user }: ProfileProps) {
     }
   };
 
+  const downloadOrderReceipt = (order: Order) => {
+    const receiptContent = `
+-------------------------------------------
+          PRATHISS ORDER RECEIPT
+-------------------------------------------
+Order ID: ${order.orderId}
+Date: ${new Date(order.createdAt).toLocaleString()}
+Status: ${order.status.toUpperCase()}
+-------------------------------------------
+CUSTOMER DETAILS:
+Name: ${order.shippingDetails.fullName}
+Email: ${order.shippingDetails.email}
+Phone: ${order.shippingDetails.phone}
+Address: ${order.shippingDetails.address}
+City: ${order.shippingDetails.city}
+State: ${order.shippingDetails.state}
+PIN Code: ${order.shippingDetails.postalCode}
+Country: ${order.shippingDetails.country}
+-------------------------------------------
+ORDER ITEMS:
+${order.items.map(item => `- ${item.name} (x${item.quantity}): ₹${(item.price * item.quantity).toLocaleString('en-IN')}`).join('\n')}
+
+Subtotal: ₹${(order.items.reduce((acc, item) => acc + item.price * item.quantity, 0)).toLocaleString('en-IN')}
+TOTAL AMOUNT: ₹${order.totalAmount.toLocaleString('en-IN')}
+Payment Method: ${order.paymentMethod.toUpperCase()}
+-------------------------------------------
+Thank you for shopping with Prathiss!
+-------------------------------------------
+    `;
+    const blob = new Blob([receiptContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt-${order.orderId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (postalCode && !/^\d{6}$/.test(postalCode)) {
       alert('Please enter a valid 6-digit PIN code.');
       return;
     }
+    setIsSaving(true);
+    setSaveSuccess(false);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      // Update Firebase Auth Profile
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: fullName });
+      }
+
+      // Update Firestore Document
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
         fullName,
+        displayName: fullName, // Keep displayName in sync in Firestore too
         address,
         city,
         state,
         postalCode,
-        phone
-      });
+        phone,
+        createdAt: user.createdAt || new Date().toISOString()
+      }, { merge: true });
+      
       setIsEditing(false);
-    } catch (error) {
-      console.error('Update profile error:', error);
-      alert('Failed to update profile.');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error: any) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -181,9 +256,9 @@ export default function Profile({ user }: ProfileProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        {/* Profile Info Section */}
-        <div className={`lg:col-span-1 ${activeTab !== 'profile' ? 'hidden lg:block' : ''}`}>
-          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm space-y-8">
+        {/* Sidebar - Stats & Navigation */}
+        <div className="lg:col-span-1 space-y-8">
+          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm space-y-6">
             <div className="flex flex-col items-center text-center mb-4">
               <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-4">
                 <User size={40} />
@@ -192,47 +267,24 @@ export default function Profile({ user }: ProfileProps) {
               <p className="text-sm text-gray-500">{user.email}</p>
             </div>
 
-            <div className="space-y-6">
-              <Link to="/favorites" className="flex items-center justify-between p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 hover:bg-red-100 transition-all group">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                    <Heart size={20} fill="currentColor" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold uppercase tracking-wider">Wishlist</h4>
-                    <p className="text-[10px] text-red-400 font-bold">{user.favorites?.length || 0} Items</p>
-                  </div>
+            <Link to="/favorites" className="flex items-center justify-between p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 hover:bg-red-100 transition-all group">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <Heart size={20} fill="currentColor" />
                 </div>
-                <ArrowRight size={18} />
-              </Link>
-
-              <div className="space-y-4">
-                <div className="flex items-start space-x-4">
-                  <MapPin className="text-gray-400 mt-1" size={20} />
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Address</h4>
-                    <p className="text-sm text-gray-900 leading-relaxed">{user.address || 'Not provided'}</p>
-                    <p className="text-sm text-gray-900">{user.city}, {user.state} - {user.postalCode}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-4">
-                  <Phone className="text-gray-400 mt-1" size={20} />
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Phone</h4>
-                    <p className="text-sm text-gray-900">{user.phone || 'Not provided'}</p>
-                  </div>
+                <div>
+                  <h4 className="text-sm font-bold uppercase tracking-wider">Wishlist</h4>
+                  <p className="text-[10px] text-red-400 font-bold">{user.favorites?.length || 0} Items</p>
                 </div>
               </div>
+              <ArrowRight size={18} />
+            </Link>
 
-              <button
-                onClick={() => {
-                  setActiveTab('profile');
-                  setIsEditing(true);
-                }}
-                className="w-full py-3 border border-indigo-100 text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-all"
-              >
-                Edit Profile
-              </button>
+            <div className="pt-6 border-t border-gray-50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Total Orders</span>
+                <span className="font-bold text-gray-900">{orders.length}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -280,7 +332,14 @@ export default function Profile({ user }: ProfileProps) {
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</p>
                             <p className="text-sm font-bold text-indigo-600 font-mono">₹{order.totalAmount.toLocaleString('en-IN')}</p>
                           </div>
-                          <div>
+                          <div className="flex items-center space-x-3">
+                            <button 
+                              onClick={() => downloadOrderReceipt(order)}
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Download Receipt"
+                            >
+                              <Download size={18} />
+                            </button>
                             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${
                               order.status === 'completed' ? 'bg-green-50 text-green-600' :
                               order.status === 'shipped' ? 'bg-blue-50 text-blue-600' :
@@ -389,83 +448,175 @@ export default function Profile({ user }: ProfileProps) {
               animate={{ opacity: 1, y: 0 }}
             >
               <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-gray-50">
-                  <h2 className="text-2xl font-bold text-gray-900">Personal Details</h2>
+                <div className="p-8 border-b border-gray-50 flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-900">Personal Information</h2>
+                  {!isEditing && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="text-indigo-600 font-bold text-sm uppercase tracking-widest hover:underline"
+                    >
+                      Edit Info
+                    </button>
+                  )}
                 </div>
-                <form onSubmit={handleUpdateProfile} className="p-8 space-y-6">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Full Name</label>
-                    <input
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter your full name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Shipping Address</label>
-                    <textarea
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter your address"
-                    ></textarea>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+                
+                {isEditing ? (
+                  <form onSubmit={handleUpdateProfile} className="p-8 space-y-6">
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">City</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Full Name</label>
                       <input
                         type="text"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="City"
+                        placeholder="Enter your full name"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">State</label>
-                      <select
-                        value={state}
-                        onChange={(e) => setState(e.target.value)}
+                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Shipping Address</label>
+                      <textarea
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        rows={3}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Enter your address"
+                      ></textarea>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">City</label>
+                        <input
+                          type="text"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="City"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">State</label>
+                        <select
+                          value={state}
+                          onChange={(e) => setState(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">Select State</option>
+                          {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">PIN Code</label>
+                        <input
+                          type="text"
+                          value={postalCode}
+                          onChange={(e) => setPostalCode(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="6-digit PIN"
+                          maxLength={6}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Phone Number</label>
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="+91 XXXXXXXXXX"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(false)}
+                        className="flex-1 py-4 border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition-all"
                       >
-                        <option value="">Select State</option>
-                        {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className={`flex-[2] py-4 text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 ${
+                          isSaving ? 'bg-gray-400 cursor-not-allowed' : 
+                          saveSuccess ? 'bg-green-600 shadow-green-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
+                        }`}
+                      >
+                        {isSaving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                            <span>Saving...</span>
+                          </>
+                        ) : saveSuccess ? (
+                          <>
+                            <CheckCircle2 size={20} />
+                            <span>Changes Saved!</span>
+                          </>
+                        ) : (
+                          <span>Save Changes</span>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="p-8 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Full Name</h4>
+                          <p className="text-lg font-bold text-gray-900">{fullName || user.displayName || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Email Address</h4>
+                          <p className="text-lg font-bold text-gray-900">{user.email}</p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Phone Number</h4>
+                          <p className="text-lg font-bold text-gray-900">{user.phone || 'Not provided'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Shipping Address</h4>
+                          <p className="text-lg font-bold text-gray-900 leading-relaxed">
+                            {user.address ? (
+                              <>
+                                {user.address}<br />
+                                {user.city}, {user.state} - {user.postalCode}
+                              </>
+                            ) : 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Account Status</h4>
+                          <div className="flex items-center space-x-2">
+                            {auth.currentUser?.emailVerified ? (
+                              <span className="text-green-600 font-bold flex items-center">
+                                <CheckCircle2 size={16} className="mr-1" /> Verified
+                              </span>
+                            ) : (
+                              <span className="text-yellow-600 font-bold flex items-center">
+                                <AlertCircle size={16} className="mr-1" /> Unverified
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-8 border-t border-gray-50">
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center space-x-2"
+                      >
+                        <User size={20} />
+                        <span>Edit Profile Details</span>
+                      </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">PIN Code</label>
-                      <input
-                        type="text"
-                        value={postalCode}
-                        onChange={(e) => setPostalCode(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="6-digit PIN"
-                        maxLength={6}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">Phone Number</label>
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="+91 XXXXXXXXXX"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
-                  >
-                    Save Changes
-                  </button>
-                </form>
+                )}
               </div>
             </motion.div>
           )}

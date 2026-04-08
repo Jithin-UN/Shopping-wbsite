@@ -30,18 +30,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, isFavor
             Free Shipping
           </span>
         </div>
-        <div className="absolute top-3 right-3 space-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 right-3 space-y-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button 
             onClick={() => onToggleFavorite?.(product.id)}
-            className={`p-2 rounded-full shadow-md transition-colors ${isFavorite ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:text-red-500'}`}
+            className={`p-2 rounded-full shadow-md transition-colors active:scale-90 ${isFavorite ? 'bg-red-500 text-white' : 'bg-white text-gray-600 hover:text-red-500'}`}
           >
             <Heart size={18} fill={isFavorite ? "currentColor" : "none"} />
           </button>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => onAddToCart(product)}
-            className="w-full bg-white text-indigo-600 py-2 rounded-lg font-medium flex items-center justify-center space-x-2 hover:bg-indigo-50 transition-colors"
+            className="w-full bg-white text-indigo-600 py-2 rounded-lg font-medium flex items-center justify-center space-x-2 hover:bg-indigo-50 active:scale-95 transition-colors"
           >
             <ShoppingCart size={18} />
             <span>Add to Cart</span>

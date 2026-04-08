@@ -1,4 +1,5 @@
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
   return (
@@ -20,20 +21,20 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-6">Shop</h4>
             <ul className="space-y-4">
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Casual Dresses</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Formal Wear</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Party Dresses</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">New Arrivals</a></li>
+              <li><Link to="/products?category=Casual" className="text-gray-500 hover:text-indigo-600 transition-colors">Casual Dresses</Link></li>
+              <li><Link to="/products?category=Formal" className="text-gray-500 hover:text-indigo-600 transition-colors">Formal Wear</Link></li>
+              <li><Link to="/products?category=Party" className="text-gray-500 hover:text-indigo-600 transition-colors">Party Dresses</Link></li>
+              <li><Link to="/products" className="text-gray-500 hover:text-indigo-600 transition-colors">New Arrivals</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-6">Support</h4>
             <ul className="space-y-4">
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Shipping Policy</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Returns & Exchanges</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">FAQs</a></li>
-              <li><a href="#" className="text-gray-500 hover:text-indigo-600 transition-colors">Contact Us</a></li>
+              <li><Link to="/shipping-policy" className="text-gray-500 hover:text-indigo-600 transition-colors">Shipping Policy</Link></li>
+              <li><Link to="/returns-exchanges" className="text-gray-500 hover:text-indigo-600 transition-colors">Returns & Exchanges</Link></li>
+              <li><Link to="/faqs" className="text-gray-500 hover:text-indigo-600 transition-colors">FAQs</Link></li>
+              <li><Link to="/contact" className="text-gray-500 hover:text-indigo-600 transition-colors">Contact Us</Link></li>
             </ul>
           </div>
 
@@ -58,8 +59,8 @@ export default function Footer() {
         <div className="border-t border-gray-100 pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-gray-400">
           <p>© 2026 Prathiss. All rights reserved.</p>
           <div className="flex space-x-6 mt-4 md:mt-0">
-            <a href="#" className="hover:text-indigo-600 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-indigo-600 transition-colors">Terms of Service</a>
+            <Link to="/privacy" className="hover:text-indigo-600 transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-indigo-600 transition-colors">Terms of Service</Link>
           </div>
         </div>
       </div>

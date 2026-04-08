@@ -16,6 +16,27 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
   const product = products.find(p => p.id === id);
   const isFavorite = id ? favorites.includes(id) : false;
 
+  const handleShare = async () => {
+    if (!product) return;
+    const shareData = {
+      title: `Check out this ${product.name} at Prathiss`,
+      text: `I found this beautiful ${product.name} on Prathiss. What do you think?`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback to WhatsApp
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareData.text + " " + shareData.url)}`;
+        window.open(whatsappUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
+  };
+
   if (!product) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center bg-gray-50 p-8">
@@ -67,10 +88,11 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
               </span>
               <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-2">{product.name}</h1>
               <div className="flex items-center space-x-4">
-                <div className="flex text-yellow-400">
-                  {[...Array(5)].map((_, i) => <Star key={i} size={18} fill="currentColor" />)}
-                </div>
-                <span className="text-sm text-gray-500 font-medium">(4.8 / 5.0 based on 124 reviews)</span>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                  product.stock > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                }`}>
+                  {product.stock > 0 ? `${product.stock} Units Available` : 'Out of Stock'}
+                </span>
               </div>
             </div>
             <div className="flex space-x-2">
@@ -80,7 +102,10 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
               >
                 <Heart size={20} fill={isFavorite ? "currentColor" : "none"} />
               </button>
-              <button className="p-3 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-indigo-600 hover:border-indigo-100 transition-all shadow-sm">
+              <button 
+                onClick={handleShare}
+                className="p-3 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-indigo-600 hover:border-indigo-100 transition-all shadow-sm"
+              >
                 <Share2 size={20} />
               </button>
             </div>
@@ -118,10 +143,15 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
           <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
             <button
               onClick={() => onAddToCart(product)}
-              className="flex-grow bg-indigo-600 text-white px-8 py-5 rounded-2xl font-bold text-lg flex items-center justify-center space-x-3 hover:bg-indigo-700 transition-all transform hover:scale-[1.02] shadow-xl shadow-indigo-100"
+              disabled={product.stock <= 0}
+              className={`flex-grow px-8 py-5 rounded-2xl font-bold text-lg flex items-center justify-center space-x-3 transition-all transform hover:scale-[1.02] shadow-xl shadow-indigo-100 ${
+                product.stock > 0 
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed transform-none shadow-none'
+              }`}
             >
               <ShoppingCart size={24} />
-              <span>Add to Shopping Bag</span>
+              <span>{product.stock > 0 ? 'Add to Shopping Bag' : 'Out of Stock'}</span>
             </button>
           </div>
         </motion.div>

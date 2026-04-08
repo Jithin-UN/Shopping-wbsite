@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, UserPlus, ArrowRight, AlertCircle } from 'lucide-react';
-import { auth, db } from '../firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { Mail, Lock, User, UserPlus, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'motion/react';
 
@@ -25,17 +25,31 @@ export default function Signup() {
 
       await updateProfile(user, { displayName: name });
 
-      // Create user profile in Firestore
-      const isAdminEmail = email.toLowerCase() === 'jithinullodi@gmail.com';
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: name,
-        role: isAdminEmail ? 'admin' : 'user',
-        createdAt: serverTimestamp()
+      // Send verification email via Firebase Auth
+      await sendEmailVerification(user, {
+        url: window.location.origin + '/login',
       });
 
-      navigate('/');
+      // Create user profile in Firestore
+      const isAdminEmail = email.toLowerCase() === 'jithinullodi@gmail.com';
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          email: user.email,
+          displayName: name,
+          role: isAdminEmail ? 'admin' : 'user',
+          verified: false, // Mark as unverified in DB
+          createdAt: serverTimestamp()
+        });
+      } catch (fsErr) {
+        handleFirestoreError(fsErr, OperationType.WRITE, `users/${user.uid}`);
+      }
+
+      // Show success message instead of navigating
+      setError('A verification email has been sent to your inbox. Please verify your email before logging in.');
+      setName('');
+      setEmail('');
+      setPassword('');
     } catch (err: any) {
       console.error('Signup error:', err);
       setError(err.message || 'Failed to create account. Please try again.');
@@ -57,8 +71,16 @@ export default function Signup() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center text-red-600 text-sm">
-            <AlertCircle size={18} className="mr-2 flex-shrink-0" />
+          <div className={`mb-6 p-4 border rounded-xl flex items-center text-sm ${
+            error.includes('verification email has been sent') 
+              ? 'bg-green-50 border-green-100 text-green-600' 
+              : 'bg-red-50 border-red-100 text-red-600'
+          }`}>
+            {error.includes('verification email has been sent') ? (
+              <CheckCircle2 size={18} className="mr-2 flex-shrink-0" />
+            ) : (
+              <AlertCircle size={18} className="mr-2 flex-shrink-0" />
+            )}
             <span>{error}</span>
           </div>
         )}

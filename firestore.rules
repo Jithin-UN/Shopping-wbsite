@@ -6,46 +6,56 @@ service cloud.firestore {
     // ===============================================================
     //
     // Collection: products
-    // Document ID: productId
+    // Document ID: auto-generated
     // Fields:
-    //   - name: string (required)
-    //   - description: string (optional)
-    //   - price: number (required)
+    //   - name: string (required, 1-100 chars)
+    //   - description: string (optional, 0-1000 chars)
+    //   - price: number (required, > 0)
     //   - category: string (required)
-    //   - imageUrl: string (required)
+    //   - imageUrl: string (required, valid URL)
+    //   - stock: number (required, >= 0)
     //   - createdAt: timestamp (required)
-    //   - updatedAt: timestamp (required)
+    //
+    // Collection: orders
+    // Document ID: auto-generated
+    // Fields:
+    //   - orderId: string (required)
+    //   - userId: string (required, matches auth.uid)
+    //   - items: list (required, max 50 items)
+    //   - totalAmount: number (required, > 0)
+    //   - status: string (required, enum: pending, processing, shipped, delivered, completed, cancelled)
+    //   - shippingDetails: map (required)
+    //   - paymentMethod: string (required)
+    //   - createdAt: timestamp (required)
     //
     // Collection: users
     // Document ID: userId (matches auth.uid)
     // Fields:
-    //   - uid: string (required)
-    //   - email: string (required)
-    //   - displayName: string (optional)
-    //   - role: string ('user', 'admin') (required)
+    //   - uid: string (required, matches auth.uid)
+    //   - email: string (required, valid email)
+    //   - fullName: string (optional)
+    //   - role: string (required, enum: user, admin)
     //   - address: string (optional)
+    //   - city: string (optional)
+    //   - state: string (optional)
+    //   - postalCode: string (optional)
     //   - phone: string (optional)
-    //   - createdAt: timestamp (required)
-    //
-    // Collection: orders
-    // Document ID: orderId
-    // Fields:
-    //   - userId: string (required)
-    //   - items: list (required)
-    //   - totalAmount: number (required)
-    //   - status: string ('pending', 'completed', 'shipped') (required)
-    //   - shippingAddress: string (required)
-    //   - createdAt: timestamp (required)
+    //   - favorites: list (optional, list of product IDs)
+    //   - createdAt: string (required)
     //
     // Collection: settings
-    // Document ID: 'shipping'
+    // Document ID: settingId
     // Fields:
-    //   - freeOrdersCount: number (required)
-    //   - freeShippingThreshold: number (required)
+    //   - id: string
+    //   - freeOrdersCount: number
+    //   - freeShippingThreshold: number
     //
     // ===============================================================
 
+    // ===============================================================
     // Helper Functions
+    // ===============================================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -55,73 +65,89 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
          request.auth.token.email == "jithinullodi@gmail.com");
     }
 
-    function isValidProduct(data) {
-      let requiredFields = ['name', 'price', 'category', 'imageUrl', 'stock'];
-      let allowedFields = ['name', 'price', 'category', 'imageUrl', 'description', 'stock', 'createdAt', 'updatedAt'];
-      return data.keys().hasAll(requiredFields) &&
-             data.keys().hasOnly(allowedFields) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
-             data.price is number && data.price >= 0 &&
-             data.stock is number && data.stock >= 0 &&
-             data.category is string && data.category.size() > 0 &&
-             data.imageUrl is string && (data.imageUrl.matches("^https?://.*") || data.imageUrl.matches("^data:image/.*")) &&
-             (!('description' in data) || data.description is string) &&
-             (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt is string);
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function isValidUser(data) {
-      let requiredFields = ['uid', 'email', 'role'];
-      let allowedFields = ['uid', 'email', 'displayName', 'fullName', 'role', 'address', 'city', 'state', 'postalCode', 'phone', 'favorites', 'createdAt'];
-      return data.keys().hasAll(requiredFields) &&
-             data.keys().hasOnly(allowedFields) &&
-             data.uid == request.auth.uid &&
-             data.email is string && data.email.size() > 0 &&
-             data.role in ['user', 'admin'] &&
-             (!('favorites' in data) || data.favorites is list);
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
     }
 
-    function isValidOrder(data) {
-      let requiredFields = ['orderId', 'userId', 'items', 'totalAmount', 'status', 'shippingDetails', 'paymentMethod'];
-      let allowedFields = ['orderId', 'userId', 'items', 'totalAmount', 'status', 'shippingDetails', 'paymentMethod', 'createdAt'];
-      return data.keys().hasAll(requiredFields) &&
-             data.keys().hasOnly(allowedFields) &&
-             data.userId == request.auth.uid &&
-             data.items is list && data.items.size() > 0 &&
-             data.totalAmount is number && data.totalAmount >= 0 &&
-             data.status in ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'completed'] &&
-             data.shippingDetails is map &&
-             data.paymentMethod is string;
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
     }
 
-    // Rules
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Products
     match /products/{productId} {
-      allow read: if true;
-      allow create, update: if isAdmin() && isValidProduct(request.resource.data);
-      allow delete: if isAdmin();
+      allow read: if true; // Publicly readable for the store
+      allow write: if isAdmin();
     }
 
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
-      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
-    }
-
+    // Orders
     match /orders/{orderId} {
+      function isValidOrder(data) {
+        return data.orderId is string &&
+               data.userId == request.auth.uid &&
+               data.items is list && data.items.size() <= 50 &&
+               data.totalAmount is number && data.totalAmount > 0 &&
+               data.status in ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'] &&
+               data.shippingDetails is map &&
+               data.paymentMethod is string;
+      }
+
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidOrder(request.resource.data);
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
+    // Users
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == userId &&
+               isValidEmail(data.email) &&
+               data.role in ['user', 'admin'];
+      }
+
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user';
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Settings
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Subscribers
+    match /subscribers/{email} {
+      function isValidSubscriber(data) {
+        return isValidEmail(data.email) && 
+               data.email == email &&
+               data.subscribedAt is timestamp &&
+               data.verified is bool;
+      }
+      allow read: if isAdmin();
+      allow create: if isValidSubscriber(request.resource.data) && 
+                      request.resource.data.verified == false &&
+                      !exists(/databases/$(database)/documents/subscribers/$(email));
+      allow update: if isAdmin() || 
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verified', 'verificationToken']) &&
+                       resource.data.verified == false &&
+                       request.resource.data.verified == true);
+      allow delete: if isAdmin();
     }
   }
 }

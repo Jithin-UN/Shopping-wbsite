@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, Menu, X, Shield, Search, Package, ChevronDown, Settings, Mail, Phone, Box, Heart, Check } from 'lucide-react';
+import { ShoppingBag, User, Menu, X, Shield, Search, Package, ChevronDown, Settings, Mail, Phone, Box, Heart, Check, ArrowRight } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { UserProfile } from '../types';
@@ -81,16 +81,17 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'All Products', path: '/products' },
+    { name: 'Formal', path: '/products?category=Formal' },
     { name: 'Casual', path: '/products?category=Casual' },
     { name: 'Party', path: '/products?category=Party' },
-    { name: 'Formal', path: '/products?category=Formal' },
+    { name: 'About', path: '/about' },
+    { name: 'Contact', path: '/contact' },
   ];
 
   const moreLinks = [
-    { name: 'About Us', path: '/about' },
-    { name: 'Contact', path: '/contact' },
     { name: 'FAQs', path: '/faqs' },
     { name: 'Terms', path: '/terms' },
+    { name: 'Privacy', path: '/privacy' },
   ];
 
   const isAdmin = user?.role === 'admin';
@@ -102,10 +103,10 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
         <div className="flex justify-between items-center h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center">
-            <span className="text-3xl font-black text-indigo-950 tracking-tighter italic">PRATHISS</span>
+            <span className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tighter italic">PRATHISS</span>
           </Link>
 
-          {/* Search Bar */}
+          {/* Search Bar (Desktop) */}
           <div className="hidden md:flex flex-1 max-w-md mx-8">
             <form onSubmit={handleSearch} className="relative w-full">
               <input
@@ -120,32 +121,33 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
           </div>
 
           {/* Right Actions */}
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2 sm:space-x-6">
             <button 
               onClick={() => setIsTrackModalOpen(true)}
-              className="hidden sm:flex items-center text-xs font-bold text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+              className="hidden lg:flex items-center text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-indigo-600 transition-colors"
             >
               Track Order
             </button>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-1 sm:space-x-4">
               {user && (
                 <Link to="/favorites" className="p-2 text-gray-600 hover:text-red-500 transition-colors relative">
-                  <Heart size={22} />
+                  <Heart size={20} className="sm:w-[22px] sm:h-[22px]" />
                   {user.favorites && user.favorites.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
+                    <span className="absolute top-0 right-0 bg-red-500 text-white text-[8px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white">
                       {user.favorites.length}
                     </span>
                   )}
                 </Link>
               )}
+              
               {user ? (
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-1 sm:space-x-4">
                   <Link to="/profile" className="p-2 text-gray-600 hover:text-indigo-600 transition-colors">
-                    <User size={22} />
+                    <User size={20} className="sm:w-[22px] sm:h-[22px]" />
                   </Link>
                   {isAdmin && (
-                    <Link to="/admin" className="flex items-center space-x-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all">
+                    <Link to="/admin" className="hidden sm:flex items-center space-x-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all">
                       <Shield size={18} />
                       <span className="text-xs font-bold uppercase tracking-wider">Admin</span>
                     </Link>
@@ -153,14 +155,14 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
                 </div>
               ) : (
                 <Link to="/login" className="p-2 text-gray-600 hover:text-indigo-600 transition-colors">
-                  <User size={22} />
+                  <User size={20} className="sm:w-[22px] sm:h-[22px]" />
                 </Link>
               )}
               
-              <Link to="/cart" className="p-2 text-gray-600 hover:text-indigo-600 transition-colors relative">
-                <ShoppingBag size={22} />
+              <Link to="/cart" className="p-2 text-gray-600 hover:text-indigo-600 active:scale-95 transition-colors relative">
+                <ShoppingBag size={20} className="sm:w-[22px] sm:h-[22px]" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
+                  <span className="absolute top-0 right-0 bg-indigo-600 text-white text-[8px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white">
                     {cartCount}
                   </span>
                 )}
@@ -168,7 +170,7 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
               
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden p-2 text-gray-600"
+                className="md:hidden p-2 text-gray-600 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors"
               >
                 {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
@@ -177,15 +179,15 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
         </div>
       </div>
 
-      {/* Navigation Links (Sub-header) */}
+      {/* Navigation Links (Sub-header) - Desktop */}
       <div className="hidden md:block border-t border-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center space-x-10 h-12">
+          <div className="flex items-center justify-center space-x-8 h-12">
             {navLinks.map((link) => (
               <Link
                 key={link.name}
                 to={link.path}
-                className="text-xs font-bold text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+                className="text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
               >
                 {link.name}
               </Link>
@@ -196,7 +198,7 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
               <button
                 onMouseEnter={() => setIsMoreOpen(true)}
                 onMouseLeave={() => setIsMoreOpen(false)}
-                className="flex items-center text-xs font-bold text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+                className="flex items-center text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
               >
                 More
                 <ChevronDown size={14} className="ml-1" />
@@ -216,7 +218,7 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
                       <Link
                         key={link.name}
                         to={link.path}
-                        className="block px-6 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-widest hover:bg-gray-50 hover:text-indigo-600 transition-all"
+                        className="block px-6 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:bg-gray-50 hover:text-indigo-600 transition-all"
                       >
                         {link.name}
                       </Link>
@@ -233,43 +235,109 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
       <AnimatePresence>
         {isMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-white border-t border-gray-100 overflow-hidden"
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[100] md:hidden"
           >
-            <div className="px-4 py-6 space-y-6">
-              <form onSubmit={handleSearch} className="relative">
-                <input
-                  type="text"
-                  placeholder="Search for dresses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-full py-3 pl-12 pr-4 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
-                />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              </form>
-              
-              <div className="grid grid-cols-1 gap-4">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.name}
-                    to={link.path}
-                    onClick={() => setIsMenuOpen(false)}
-                    className="text-sm font-bold text-gray-600 uppercase tracking-widest py-2 border-b border-gray-50"
-                  >
-                    {link.name}
-                  </Link>
-                ))}
-                <button 
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setIsTrackModalOpen(true);
-                  }} 
-                  className="text-sm font-bold text-indigo-600 uppercase tracking-widest py-2"
-                >
-                  Track Order
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+              onClick={() => setIsMenuOpen(false)}
+            />
+            
+            {/* Menu Content */}
+            <div className="absolute top-0 right-0 w-[80%] max-w-[300px] h-full bg-white shadow-2xl flex flex-col">
+              <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+                <span className="text-xl font-black text-indigo-950 italic">PRATHISS</span>
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 text-gray-400">
+                  <X size={24} />
                 </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                {/* Search in Mobile Menu */}
+                <form onSubmit={handleSearch} className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-11 pr-4 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                </form>
+
+                {/* Main Links */}
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Menu</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {navLinks.map((link) => (
+                      <Link
+                        key={link.name}
+                        to={link.path}
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl text-sm font-bold text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                      >
+                        {link.name}
+                        <ArrowRight size={16} className="text-gray-300" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                {/* More Links */}
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Support</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button 
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setIsTrackModalOpen(true);
+                      }} 
+                      className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl text-sm font-bold text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                    >
+                      Track Order
+                      <Box size={16} className="text-gray-300" />
+                    </button>
+                    {moreLinks.map((link) => (
+                      <Link
+                        key={link.name}
+                        to={link.path}
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl text-sm font-bold text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                      >
+                        {link.name}
+                        <ArrowRight size={16} className="text-gray-300" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile Menu Footer */}
+              <div className="p-6 border-t border-gray-50 bg-gray-50/50">
+                {user ? (
+                  <div className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold">
+                      {user.fullName?.[0] || user.displayName?.[0] || 'U'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{user.fullName || user.displayName}</p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Link 
+                    to="/login" 
+                    onClick={() => setIsMenuOpen(false)}
+                    className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center space-x-2 shadow-lg shadow-indigo-100"
+                  >
+                    <User size={18} />
+                    <span>Login / Sign Up</span>
+                  </Link>
+                )}
               </div>
             </div>
           </motion.div>

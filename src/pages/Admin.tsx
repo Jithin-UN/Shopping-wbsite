@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Trash2, Edit2, Search, Package, IndianRupee, Tag, Image as ImageIcon, X, Save, AlertCircle, Upload, Settings, Truck, Eye, Mail, CheckCircle, Clock, Box } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, Package, IndianRupee, Tag, Image as ImageIcon, X, Save, AlertCircle, Upload, Settings, Truck, Eye, Mail, CheckCircle, Clock, Box, Download } from 'lucide-react';
 import { Product, Order } from '../types';
-import { db } from '../firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs, query, where, setDoc, orderBy, onSnapshot } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs, query, where, setDoc, orderBy, onSnapshot, increment } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AdminProps {
@@ -54,7 +54,7 @@ export default function Admin({ products }: AdminProps) {
           });
         }
       } catch (err) {
-        console.error('Error fetching settings:', err);
+        handleFirestoreError(err, OperationType.LIST, 'settings');
       }
     };
     fetchSettings();
@@ -63,14 +63,18 @@ export default function Admin({ products }: AdminProps) {
   React.useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Order[];
+      const ordersData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+        };
+      }) as Order[];
       setOrders(ordersData);
       setOrdersLoading(false);
     }, (err) => {
-      console.error('Error fetching orders:', err);
+      handleFirestoreError(err, OperationType.LIST, 'orders');
       setOrdersLoading(false);
     });
 
@@ -91,8 +95,32 @@ export default function Admin({ products }: AdminProps) {
     setUpdatingOrder(true);
     try {
       const orderRef = doc(db, 'orders', orderId);
+      const previousStatus = selectedOrder?.status;
+      const newStatus = statusInput;
+
+      // If order is being cancelled, restore stock
+      if (newStatus === 'cancelled' && previousStatus !== 'cancelled') {
+        const stockRestores = selectedOrder?.items.map(item => {
+          const productRef = doc(db, 'products', item.productId);
+          return updateDoc(productRef, {
+            stock: increment(item.quantity)
+          });
+        });
+        if (stockRestores) await Promise.all(stockRestores);
+      }
+      // If order was cancelled but is now being restored (e.g. back to pending), reduce stock again
+      else if (previousStatus === 'cancelled' && newStatus !== 'cancelled') {
+        const stockReduces = selectedOrder?.items.map(item => {
+          const productRef = doc(db, 'products', item.productId);
+          return updateDoc(productRef, {
+            stock: increment(-item.quantity)
+          });
+        });
+        if (stockReduces) await Promise.all(stockReduces);
+      }
+
       const updateData: Partial<Order> = {
-        status: statusInput
+        status: newStatus
       };
 
       await updateDoc(orderRef, updateData);
@@ -104,11 +132,49 @@ export default function Admin({ products }: AdminProps) {
       // Close the details modal
       setSelectedOrder(null);
     } catch (err) {
-      console.error('Error updating order:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `orders/${orderId}`);
       alert('Failed to update order.');
     } finally {
       setUpdatingOrder(false);
     }
+  };
+
+  const downloadOrderReceipt = (order: Order) => {
+    const receiptContent = `
+-------------------------------------------
+          PRATHISS ORDER RECEIPT
+-------------------------------------------
+Order ID: ${order.orderId}
+Date: ${new Date(order.createdAt).toLocaleString()}
+Status: ${order.status.toUpperCase()}
+-------------------------------------------
+CUSTOMER DETAILS:
+Name: ${order.shippingDetails.fullName}
+Email: ${order.shippingDetails.email}
+Phone: ${order.shippingDetails.phone}
+Address: ${order.shippingDetails.address}
+City: ${order.shippingDetails.city}
+State: ${order.shippingDetails.state}
+PIN Code: ${order.shippingDetails.postalCode}
+Country: ${order.shippingDetails.country}
+-------------------------------------------
+ORDER ITEMS:
+${order.items.map(item => `- ${item.name} (x${item.quantity}): ₹${(item.price * item.quantity).toLocaleString('en-IN')}`).join('\n')}
+
+Subtotal: ₹${(order.items.reduce((acc, item) => acc + item.price * item.quantity, 0)).toLocaleString('en-IN')}
+TOTAL AMOUNT: ₹${order.totalAmount.toLocaleString('en-IN')}
+Payment Method: ${order.paymentMethod.toUpperCase()}
+-------------------------------------------
+Generated by Admin Panel - Prathiss
+-------------------------------------------
+    `;
+    const blob = new Blob([receiptContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt-${order.orderId}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleUpdateSettings = async (e: React.FormEvent) => {
@@ -123,7 +189,7 @@ export default function Admin({ products }: AdminProps) {
       });
       alert('Settings updated successfully!');
     } catch (err) {
-      console.error('Error updating settings:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'settings/shipping');
       alert('Failed to update settings.');
     } finally {
       setSettingsLoading(false);
@@ -230,10 +296,31 @@ export default function Admin({ products }: AdminProps) {
     setError('');
     setLoading(true);
 
+    const productPrice = parseFloat(formData.price);
+    const productStock = parseInt(formData.stock);
+
+    if (isNaN(productPrice) || productPrice < 0) {
+      setError('Please enter a valid price.');
+      setLoading(false);
+      return;
+    }
+
+    if (isNaN(productStock) || productStock < 0) {
+      setError('Please enter a valid stock quantity.');
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.imageUrl) {
+      setError('Please upload an image or provide a valid image URL.');
+      setLoading(false);
+      return;
+    }
+
     const productData = {
       ...formData,
-      price: parseFloat(formData.price),
-      stock: parseInt(formData.stock),
+      price: productPrice,
+      stock: productStock,
       updatedAt: new Date().toISOString()
     };
 
@@ -249,7 +336,11 @@ export default function Admin({ products }: AdminProps) {
       resetForm();
     } catch (err: any) {
       console.error('Admin action error:', err);
-      setError(err.message || 'Failed to save product.');
+      try {
+        handleFirestoreError(err, editingProduct ? OperationType.UPDATE : OperationType.CREATE, 'products');
+      } catch (finalErr: any) {
+        setError(finalErr.message || 'Failed to save product.');
+      }
     } finally {
       setLoading(false);
     }
@@ -259,8 +350,7 @@ export default function Admin({ products }: AdminProps) {
     try {
       await deleteDoc(doc(db, 'products', id));
     } catch (err) {
-      console.error('Delete error:', err);
-      alert('Failed to delete product. Check console for details.');
+      handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
     }
   };
 
@@ -334,9 +424,18 @@ export default function Admin({ products }: AdminProps) {
                   <h2 className="text-2xl font-bold text-gray-900">Order Details</h2>
                   <p className="text-sm font-mono text-gray-500">{selectedOrder.orderId}</p>
                 </div>
-                <button onClick={() => setSelectedOrder(null)} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                  <X size={24} />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => downloadOrderReceipt(selectedOrder)} 
+                    className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                    title="Download Receipt"
+                  >
+                    <Download size={20} />
+                  </button>
+                  <button onClick={() => setSelectedOrder(null)} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
               </div>
               
               <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
@@ -765,15 +864,25 @@ export default function Admin({ products }: AdminProps) {
                       </span>
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setStatusInput(order.status);
-                        }}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                      >
-                        <Eye size={18} />
-                      </button>
+                      <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setStatusInput(order.status);
+                          }}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="View Details"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button
+                          onClick={() => downloadOrderReceipt(order)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                          title="Download Receipt"
+                        >
+                          <Download size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -890,7 +999,7 @@ export default function Admin({ products }: AdminProps) {
                     <p className="text-[10px] text-gray-400 uppercase tracking-tighter">Available</p>
                   </td>
                   <td className="px-8 py-6 text-sm text-gray-500">
-                    {new Date(product.createdAt).toLocaleDateString()}
+                    {formatDate(product.createdAt)}
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end space-x-2">

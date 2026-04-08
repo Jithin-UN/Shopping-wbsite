@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { CreditCard, Truck, ShieldCheck, ArrowLeft, CheckCircle2, ShoppingBag, ChevronRight, Plus, MapPin, Check, Mail, Edit2, X } from 'lucide-react';
-import { CartItem, UserProfile } from '../types';
-import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { CreditCard, Truck, ShieldCheck, ArrowLeft, CheckCircle2, ShoppingBag, ChevronRight, Plus, MapPin, Check, Mail, Edit2, X, AlertCircle } from 'lucide-react';
+import { CartItem, UserProfile, Product } from '../types';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, updateDoc, setDoc, increment } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
+
 import { INDIAN_STATES } from '../constants';
 
 interface CheckoutProps {
@@ -19,6 +20,7 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
   const [step, setStep] = useState<CheckoutStep>('delivery');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [orderCount, setOrderCount] = useState(0);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
@@ -97,6 +99,12 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
 
   const handleNextStep = () => {
     if (step === 'delivery') {
+      // If not adding a new address, user MUST select one of the saved addresses
+      if (!showNewAddressForm && selectedAddressIndex === null) {
+        alert('Please select a delivery address to proceed.');
+        return;
+      }
+
       if (!formData.address || !formData.city || !formData.state || !formData.postalCode || !formData.phone || !formData.fullName) {
         alert('Please fill in all delivery details.');
         return;
@@ -120,13 +128,24 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
     if (cart.length === 0) return;
 
     setIsProcessing(true);
+    setCheckoutError(null);
     try {
+      // Final stock check before placing order
+      const productsSnapshot = await getDocs(collection(db, 'products'));
+      const productsMap = new Map(productsSnapshot.docs.map(doc => [doc.id, doc.data() as Product]));
+      
+      for (const item of cart) {
+        const product = productsMap.get(item.productId);
+        if (!product || product.stock < item.quantity) {
+          setCheckoutError(`Sorry, ${item.name} is no longer available in the requested quantity. Please update your bag.`);
+          setIsProcessing(false);
+          return;
+        }
+      }
+
       // Generate a unique order ID for tracking
       const orderId = `PRATH-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
       
-      // Simulate payment delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       // Create order in Firestore
       const orderData = {
         orderId,
@@ -134,12 +153,30 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
         items: cart,
         totalAmount: total,
         status: 'pending',
-        shippingDetails: formData,
+        shippingDetails: {
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          postalCode: formData.postalCode,
+          country: formData.country
+        },
         paymentMethod: 'online',
         createdAt: serverTimestamp()
       };
 
       await addDoc(collection(db, 'orders'), orderData);
+
+      // Update Stock for each item
+      const stockUpdates = cart.map(item => {
+        const productRef = doc(db, 'products', item.productId);
+        return updateDoc(productRef, {
+          stock: increment(-item.quantity)
+        });
+      });
+      await Promise.all(stockUpdates);
 
       // Direct Email Simulation (as requested by user)
       console.log(`%c [DIRECT EMAIL SENT TO GMAIL] To: ${formData.email} \n Subject: Order Confirmation - ${orderId} \n Body: Thank you for your order! Your order ID is ${orderId}. Total: ₹${total.toLocaleString('en-IN')}. You can track your order status on our website using this Order ID.`, 'background: #4f46e5; color: #fff; padding: 10px; border-radius: 5px;');
@@ -148,22 +185,30 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
 
       // Update user address if "saveAddress" is checked
       if (formData.saveAddress) {
-        await updateDoc(doc(db, 'users', user.uid), {
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          email: user.email,
+          role: user.role,
           fullName: formData.fullName,
           address: formData.address,
           city: formData.city,
           state: formData.state,
           postalCode: formData.postalCode,
-          phone: formData.phone
-        });
+          phone: formData.phone,
+          createdAt: user.createdAt || new Date().toISOString()
+        }, { merge: true });
       }
 
       setFormData(prev => ({ ...prev, orderId })); // Store orderId in state to show on success page
       setIsSuccess(true);
       clearCart();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Checkout error:', error);
-      alert('Something went wrong. Please try again.');
+      try {
+        handleFirestoreError(error, OperationType.WRITE, 'orders/products/users');
+      } catch (finalErr: any) {
+        setCheckoutError(finalErr.message || 'Something went wrong. Please try again.');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -249,7 +294,7 @@ Thank you for shopping with Prathiss!
         </p>
         <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
           <button
-            onClick={() => setIsSuccess(false)}
+            onClick={() => navigate('/')}
             className="px-8 py-4 bg-white border border-red-200 text-red-600 font-bold rounded-xl hover:bg-red-50 transition-all shadow-sm flex items-center justify-center"
           >
             <X size={18} className="mr-2" />
@@ -286,28 +331,28 @@ Thank you for shopping with Prathiss!
         <h1 className="text-4xl font-bold text-gray-900 mb-8">Checkout</h1>
         
         {/* Step Indicator */}
-        <div className="flex items-center justify-between max-w-2xl">
-          <div className="flex items-center flex-1">
-            <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${step === 'delivery' || step === 'payment' || step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
-              {step === 'payment' || step === 'review' ? <Check size={20} /> : '1'}
+        <div className="flex items-center justify-between max-w-2xl overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex items-center flex-1 min-w-fit">
+            <div className={`flex-shrink-0 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${step === 'delivery' || step === 'payment' || step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
+              {step === 'payment' || step === 'review' ? <Check size={16} className="sm:w-5 sm:h-5" /> : '1'}
             </div>
-            <div className={`ml-3 text-sm font-bold ${step === 'delivery' ? 'text-indigo-600' : 'text-gray-500'}`}>Delivery</div>
-            <div className="flex-1 h-px bg-gray-200 mx-4"></div>
+            <div className={`ml-2 sm:ml-3 text-[10px] sm:text-sm font-bold whitespace-nowrap ${step === 'delivery' ? 'text-indigo-600' : 'text-gray-500'}`}>Delivery</div>
+            <div className="flex-1 h-px bg-gray-200 mx-2 sm:mx-4 min-w-[20px]"></div>
           </div>
           
-          <div className="flex items-center flex-1">
-            <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${step === 'payment' || step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
-              {step === 'review' ? <Check size={20} /> : '2'}
+          <div className="flex items-center flex-1 min-w-fit">
+            <div className={`flex-shrink-0 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${step === 'payment' || step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
+              {step === 'review' ? <Check size={16} className="sm:w-5 sm:h-5" /> : '2'}
             </div>
-            <div className={`ml-3 text-sm font-bold ${step === 'payment' ? 'text-indigo-600' : 'text-gray-500'}`}>Payment</div>
-            <div className="flex-1 h-px bg-gray-200 mx-4"></div>
+            <div className={`ml-2 sm:ml-3 text-[10px] sm:text-sm font-bold whitespace-nowrap ${step === 'payment' ? 'text-indigo-600' : 'text-gray-500'}`}>Payment</div>
+            <div className="flex-1 h-px bg-gray-200 mx-2 sm:mx-4 min-w-[20px]"></div>
           </div>
 
-          <div className="flex items-center">
-            <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
+          <div className="flex items-center min-w-fit">
+            <div className={`flex-shrink-0 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${step === 'review' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-400'}`}>
               3
             </div>
-            <div className={`ml-3 text-sm font-bold ${step === 'review' ? 'text-indigo-600' : 'text-gray-500'}`}>Review</div>
+            <div className={`ml-2 sm:ml-3 text-[10px] sm:text-sm font-bold whitespace-nowrap ${step === 'review' ? 'text-indigo-600' : 'text-gray-500'}`}>Review</div>
           </div>
         </div>
       </div>
@@ -328,7 +373,21 @@ Thank you for shopping with Prathiss!
                   <div className="flex items-center justify-between">
                     <h3 className="text-xl font-bold text-gray-900">Saved Addresses</h3>
                     <button 
-                      onClick={() => setShowNewAddressForm(!showNewAddressForm)}
+                      onClick={() => {
+                        if (!showNewAddressForm) {
+                          setSelectedAddressIndex(null);
+                          setFormData({
+                            ...formData,
+                            fullName: '',
+                            address: '',
+                            city: '',
+                            state: '',
+                            postalCode: '',
+                            phone: ''
+                          });
+                        }
+                        setShowNewAddressForm(!showNewAddressForm);
+                      }}
                       className="text-indigo-600 text-sm font-bold flex items-center hover:underline"
                     >
                       <Plus size={16} className="mr-1" />
@@ -493,7 +552,7 @@ Thank you for shopping with Prathiss!
 
                 <button
                   onClick={handleNextStep}
-                  className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 transform hover:scale-[1.02]"
+                  className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 transform hover:scale-[1.02]"
                 >
                   Deliver to this address
                 </button>
@@ -532,11 +591,19 @@ Thank you for shopping with Prathiss!
                         <div className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">Secure</div>
                       </div>
                       
-                      <div className="flex flex-wrap gap-4 items-center">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo.png" alt="UPI" className="h-5 object-contain hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/2560px-Visa_Inc._logo.svg.png" alt="Visa" className="h-4 object-contain hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/1280px-Mastercard-logo.svg.png" alt="Mastercard" className="h-6 object-contain hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Rupay-Logo.png/1200px-Rupay-Logo.png" alt="RuPay" className="h-5 object-contain hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                      <div className="flex flex-wrap gap-6 items-center mt-4">
+                        <div className="h-8 flex items-center justify-center bg-white px-3 py-1 rounded-lg border border-gray-100 shadow-sm">
+                          <img src="https://www.vectorlogo.zone/logos/upi/upi-ar21.svg" alt="UPI" className="h-5 object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                        <div className="h-8 flex items-center justify-center bg-white px-3 py-1 rounded-lg border border-gray-100 shadow-sm">
+                          <img src="https://www.logo.wine/a/logo/Visa_Inc./Visa_Inc.-Logo.wine.svg" alt="Visa" className="h-10 object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                        <div className="h-8 flex items-center justify-center bg-white px-3 py-1 rounded-lg border border-gray-100 shadow-sm">
+                          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/1280px-Mastercard-logo.svg.png" alt="Mastercard" className="h-5 object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                        <div className="h-8 flex items-center justify-center bg-white px-3 py-1 rounded-lg border border-gray-100 shadow-sm">
+                          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Rupay-Logo.png/1200px-Rupay-Logo.png" alt="RuPay" className="h-4 object-contain" referrerPolicy="no-referrer" />
+                        </div>
                         <div className="h-4 w-px bg-gray-200 mx-2"></div>
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Powered by Razorpay</span>
                       </div>
@@ -566,7 +633,7 @@ Thank you for shopping with Prathiss!
                   </button>
                   <button
                     onClick={handleNextStep}
-                    className="px-12 py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 transform hover:scale-[1.02]"
+                    className="px-12 py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 transform hover:scale-[1.02]"
                   >
                     Review Order
                   </button>
@@ -638,7 +705,7 @@ Thank you for shopping with Prathiss!
                   <button
                     onClick={handleCheckout}
                     disabled={isProcessing}
-                    className="px-12 py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center space-x-3 transform hover:scale-[1.02]"
+                    className="px-12 py-5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-xl shadow-indigo-100 flex items-center justify-center space-x-3 transform hover:scale-[1.02]"
                   >
                     {isProcessing ? (
                       <>
@@ -652,6 +719,16 @@ Thank you for shopping with Prathiss!
                       </>
                     )}
                   </button>
+                  
+                  {checkoutError && (
+                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start text-red-600 text-sm">
+                      <AlertCircle size={18} className="mr-3 flex-shrink-0 mt-0.5" />
+                      <div className="break-words overflow-hidden">
+                        <p className="font-bold mb-1">Checkout Error</p>
+                        <p className="text-xs opacity-80">{checkoutError}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}

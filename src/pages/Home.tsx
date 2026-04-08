@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Star, Truck, ShieldCheck, RefreshCcw } from 'lucide-react';
+import { ArrowRight, Star, Truck, ShieldCheck, RefreshCcw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
 import ProductCard from '../components/ProductCard';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
 
 interface HomeProps {
   products: Product[];
@@ -13,7 +16,72 @@ interface HomeProps {
 }
 
 export default function Home({ products, onAddToCart, favorites, onToggleFavorite }: HomeProps) {
-  const featuredProducts = products.slice(0, 8);
+  const [email, setEmail] = useState('');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [subscribeStatus, setSubscribeStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setSubscribeStatus('error');
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSubscribing(true);
+    setSubscribeStatus('idle');
+
+    try {
+      // 1. Check if already subscribed
+      const docRef = doc(db, 'subscribers', email.toLowerCase());
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        setSubscribeStatus('error');
+        setErrorMessage('This email is already subscribed!');
+        setIsSubscribing(false);
+        return;
+      }
+
+      // 2. Save subscription directly (no verification required for newsletter)
+      await setDoc(docRef, {
+        email: email.toLowerCase(),
+        subscribedAt: serverTimestamp(),
+        verified: true
+      });
+
+      // 3. Call Backend to send confirmation email
+      const response = await fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase() })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Failed to send confirmation email');
+      }
+
+      setSubscribeStatus('success');
+      setEmail('');
+    } catch (error: any) {
+      console.error('Subscription error:', error);
+      setSubscribeStatus('error');
+      setErrorMessage(error.message || 'Something went wrong. Please try again later.');
+      handleFirestoreError(error, OperationType.WRITE, `subscribers/${email}`);
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
+  const featuredProducts = [...products]
+    .sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    })
+    .slice(0, 4);
 
   return (
     <div id="home-page" className="space-y-24 pb-24 bg-white">
@@ -115,16 +183,64 @@ export default function Home({ products, onAddToCart, favorites, onToggleFavorit
             <p className="text-indigo-100 mb-10 text-lg">
               Subscribe to get special offers, free giveaways, and once-in-a-lifetime deals.
             </p>
-            <form className="flex flex-col sm:flex-row gap-4">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                className="flex-grow px-6 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-              <button className="px-8 py-4 bg-white text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-lg">
-                Subscribe
+            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-grow relative">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  disabled={isSubscribing || subscribeStatus === 'success'}
+                  className="w-full px-6 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
+                />
+                <AnimatePresence>
+                  {subscribeStatus === 'success' && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-green-400"
+                    >
+                      <CheckCircle2 size={24} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <button 
+                type="submit"
+                disabled={isSubscribing || subscribeStatus === 'success'}
+                className="px-8 py-4 bg-white text-indigo-600 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center min-w-[140px]"
+              >
+                {isSubscribing ? (
+                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                ) : subscribeStatus === 'success' ? (
+                  'Subscribed!'
+                ) : (
+                  'Subscribe'
+                )}
               </button>
             </form>
+            <AnimatePresence>
+              {subscribeStatus === 'error' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mt-4 flex items-center justify-center text-red-200 text-sm font-medium"
+                >
+                  <AlertCircle size={16} className="mr-2" />
+                  {errorMessage}
+                </motion.div>
+              )}
+              {subscribeStatus === 'success' && (
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 text-indigo-100 text-sm font-medium"
+                >
+                  Welcome to the club! You've successfully subscribed.
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </section>
