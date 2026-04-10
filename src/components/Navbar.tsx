@@ -41,16 +41,23 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
       return;
     }
 
+    if (!auth.currentUser) {
+      setTrackError('Please login to track your order.');
+      return;
+    }
+
     setIsTrackLoading(true);
     setTrackError('');
     setTrackResult(null);
 
     try {
       const ordersRef = collection(db, 'orders');
+      // We filter by orderId, email/phone AND userId to satisfy security rules
       const q = query(
         ordersRef, 
         where('orderId', '==', trackOrderId.trim().toUpperCase()),
         where(trackMethod === 'email' ? 'shippingDetails.email' : 'shippingDetails.phone', '==', trackValue.trim()),
+        where('userId', '==', auth.currentUser.uid),
         limit(1)
       );
       
@@ -59,11 +66,15 @@ export default function Navbar({ user, cartCount }: NavbarProps) {
       if (!querySnapshot.empty) {
         setTrackResult(querySnapshot.docs[0].data());
       } else {
-        setTrackError('Order ID not found. Please check your details.');
+        setTrackError('Order not found. Make sure the Order ID and ' + trackMethod + ' are correct and belong to your account.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Tracking error:', error);
-      setTrackError('An error occurred while tracking your order.');
+      if (error.message?.includes('permission')) {
+        setTrackError('You do not have permission to track this order. Please ensure you are logged in with the correct account.');
+      } else {
+        setTrackError('An error occurred while tracking your order. Please try again later.');
+      }
     } finally {
       setIsTrackLoading(false);
     }

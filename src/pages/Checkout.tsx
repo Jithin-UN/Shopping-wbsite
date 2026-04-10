@@ -204,8 +204,13 @@ export default function Checkout({ cart, user, clearCart }: CheckoutProps) {
       clearCart();
     } catch (error: any) {
       console.error('Checkout error:', error);
+      // Determine which part failed for better debugging
+      let errorPath = 'orders';
+      if (error.message?.includes('products')) errorPath = 'products';
+      else if (error.message?.includes('users')) errorPath = 'users';
+      
       try {
-        handleFirestoreError(error, OperationType.WRITE, 'orders/products/users');
+        handleFirestoreError(error, OperationType.WRITE, errorPath);
       } catch (finalErr: any) {
         setCheckoutError(finalErr.message || 'Something went wrong. Please try again.');
       }

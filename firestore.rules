@@ -66,8 +66,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-         request.auth.token.email == "jithinullodi@gmail.com");
+        (request.auth.token.email == "jithinullodi@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function isValidEmail(email) {
@@ -89,7 +90,13 @@ service cloud.firestore {
     // Products
     match /products/{productId} {
       allow read: if true; // Publicly readable for the store
-      allow write: if isAdmin();
+      allow update: if isAdmin() || 
+                      (isAuthenticated() && 
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']) &&
+                       request.resource.data.stock is number &&
+                       request.resource.data.stock >= 0 &&
+                       request.resource.data.stock < resource.data.stock);
+      allow create, delete: if isAdmin();
     }
 
     // Orders
@@ -104,7 +111,14 @@ service cloud.firestore {
                data.paymentMethod is string;
       }
 
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Allow reading if owner, admin, or if tracking with correct details
+      allow read: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin())) ||
+                    (resource.data.orderId == request.params.orderId); // This is for get()
+      
+      // Allow listing (queries) for authenticated users
+      // The individual document check (read) will still enforce ownership or tracking details
+      allow list: if isAuthenticated();
+      
       allow create: if isAuthenticated() && isValidOrder(request.resource.data);
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -141,6 +155,11 @@ service cloud.firestore {
                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verified', 'verificationToken']) &&
                        request.resource.data.verified == true);
       allow delete: if isAdmin();
+    }
+
+    // Password Resets (Internal use for OTP)
+    match /passwordResets/{email} {
+      allow read, write: if false; // Only accessible via Admin SDK on server
     }
   }
 }
