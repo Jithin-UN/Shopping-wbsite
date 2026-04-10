@@ -30,6 +30,7 @@ import FAQs from './pages/FAQs';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Verify from './pages/Verify';
+import AuthAction from './pages/AuthAction';
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -55,6 +56,14 @@ export default function App() {
           const isAdminEmail = firebaseUser.email?.toLowerCase() === 'jithinullodi@gmail.com';
           if (docSnap.exists()) {
             const data = docSnap.data();
+            
+            // Sync verification status if needed
+            if (firebaseUser.emailVerified && !data.verified) {
+              updateDoc(userDoc, { verified: true }).catch(err => {
+                console.error('Failed to sync verification status:', err);
+              });
+            }
+
             setUser({
               ...data,
               role: isAdminEmail ? 'admin' : data.role,
@@ -262,6 +271,7 @@ export default function App() {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/verify" element={<Verify />} />
+            <Route path="/auth-action" element={<AuthAction />} />
           </Routes>
         </main>
         <Footer />

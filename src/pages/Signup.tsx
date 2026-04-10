@@ -27,7 +27,7 @@ export default function Signup() {
 
       // Send verification email via Firebase Auth
       await sendEmailVerification(user, {
-        url: window.location.origin + '/login',
+        url: window.location.origin + '/auth-action',
       });
 
       // Create user profile in Firestore

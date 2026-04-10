@@ -35,7 +35,13 @@ export default function Home({ products, onAddToCart, favorites, onToggleFavorit
     try {
       // 1. Check if already subscribed
       const docRef = doc(db, 'subscribers', email.toLowerCase());
-      const docSnap = await getDoc(docRef);
+      let docSnap;
+      try {
+        docSnap = await getDoc(docRef);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, `subscribers/${email.toLowerCase()}`);
+        throw error;
+      }
       
       if (docSnap.exists()) {
         setSubscribeStatus('error');
@@ -45,11 +51,16 @@ export default function Home({ products, onAddToCart, favorites, onToggleFavorit
       }
 
       // 2. Save subscription directly (no verification required for newsletter)
-      await setDoc(docRef, {
-        email: email.toLowerCase(),
-        subscribedAt: serverTimestamp(),
-        verified: true
-      });
+      try {
+        await setDoc(docRef, {
+          email: email.toLowerCase(),
+          subscribedAt: serverTimestamp(),
+          verified: true
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `subscribers/${email.toLowerCase()}`);
+        throw error;
+      }
 
       // 3. Call Backend to send confirmation email
       const response = await fetch('/api/send-confirmation', {
@@ -68,8 +79,10 @@ export default function Home({ products, onAddToCart, favorites, onToggleFavorit
     } catch (error: any) {
       console.error('Subscription error:', error);
       setSubscribeStatus('error');
-      setErrorMessage(error.message || 'Something went wrong. Please try again later.');
-      handleFirestoreError(error, OperationType.WRITE, `subscribers/${email}`);
+      // Only set error message if it's not already set by the logic above
+      if (!errorMessage) {
+        setErrorMessage(error.message || 'Something went wrong. Please try again later.');
+      }
     } finally {
       setIsSubscribing(false);
     }

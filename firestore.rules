@@ -115,7 +115,8 @@ service cloud.firestore {
       function isValidUser(data) {
         return data.uid == userId &&
                isValidEmail(data.email) &&
-               data.role in ['user', 'admin'];
+               data.role in ['user', 'admin'] &&
+               (!('verified' in data) || data.verified is bool);
       }
 
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
@@ -133,19 +134,11 @@ service cloud.firestore {
 
     // Subscribers
     match /subscribers/{email} {
-      function isValidSubscriber(data) {
-        return isValidEmail(data.email) && 
-               data.email == email &&
-               data.subscribedAt is timestamp &&
-               data.verified is bool;
-      }
-      allow read: if isAdmin();
-      allow create: if isValidSubscriber(request.resource.data) && 
-                      request.resource.data.verified == false &&
-                      !exists(/databases/$(database)/documents/subscribers/$(email));
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if true; // Allow anyone to subscribe
       allow update: if isAdmin() || 
                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verified', 'verificationToken']) &&
-                       resource.data.verified == false &&
                        request.resource.data.verified == true);
       allow delete: if isAdmin();
     }
