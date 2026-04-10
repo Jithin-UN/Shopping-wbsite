@@ -31,13 +31,12 @@ export default function Signup() {
       });
 
       // Create user profile in Firestore
-      const isAdminEmail = email.toLowerCase() === 'jithinullodi@gmail.com';
       try {
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           email: user.email,
           displayName: name,
-          role: isAdminEmail ? 'admin' : 'user',
+          role: 'user',
           verified: false, // Mark as unverified in DB
           createdAt: serverTimestamp()
         });
