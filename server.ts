@@ -79,7 +79,7 @@ app.post('/api/send-verification', async (req, res) => {
     const { email, token } = req.body;
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
-    const adminEmail = process.env.ADMIN_EMAIL || 'jithinullodi@gmail.com';
+    const adminEmail = process.env.ADMIN_EMAIL;
     const appUrl = process.env.VITE_APP_URL || `http://localhost:${PORT}`;
 
     if (!gmailUser || !gmailPass) {
@@ -134,7 +134,7 @@ app.post('/api/send-verification', async (req, res) => {
     const { email } = req.body;
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
-    const adminEmail = process.env.ADMIN_EMAIL || 'jithinullodi@gmail.com';
+    const adminEmail = process.env.ADMIN_EMAIL;
 
     if (!gmailUser || !gmailPass) {
       return res.status(500).json({ error: 'Email configuration missing' });

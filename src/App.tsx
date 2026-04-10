@@ -53,7 +53,6 @@ export default function App() {
         // Fetch user profile
         const userDoc = doc(db, 'users', firebaseUser.uid);
         unsubProfile = onSnapshot(userDoc, (docSnap) => {
-          const isAdminEmail = firebaseUser.email?.toLowerCase() === 'jithinullodi@gmail.com';
           if (docSnap.exists()) {
             const data = docSnap.data();
             
@@ -66,7 +65,6 @@ export default function App() {
 
             setUser({
               ...data,
-              role: isAdminEmail ? 'admin' : data.role,
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
             } as UserProfile);
           } else {
@@ -74,7 +72,7 @@ export default function App() {
             setUser({
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
-              role: isAdminEmail ? 'admin' : 'user',
+              role: 'user',
               createdAt: new Date().toISOString()
             });
           }
