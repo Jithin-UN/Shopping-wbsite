@@ -8,11 +8,10 @@ import { motion } from 'motion/react';
 interface FavoritesProps {
   products: Product[];
   favorites: string[];
-  onAddToCart: (product: Product) => void;
   onToggleFavorite: (productId: string) => void;
 }
 
-export default function Favorites({ products, favorites, onAddToCart, onToggleFavorite }: FavoritesProps) {
+export default function Favorites({ products, favorites, onToggleFavorite }: FavoritesProps) {
   const favoriteProducts = products.filter(p => favorites.includes(p.id));
 
   return (
@@ -33,7 +32,6 @@ export default function Favorites({ products, favorites, onAddToCart, onToggleFa
             <ProductCard 
               key={product.id} 
               product={product} 
-              onAddToCart={onAddToCart} 
               isFavorite={true}
               onToggleFavorite={onToggleFavorite}
             />

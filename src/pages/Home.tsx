@@ -10,12 +10,11 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface HomeProps {
   products: Product[];
-  onAddToCart: (product: Product) => void;
   favorites: string[];
   onToggleFavorite: (productId: string) => void;
 }
 
-export default function Home({ products, onAddToCart, favorites, onToggleFavorite }: HomeProps) {
+export default function Home({ products, favorites, onToggleFavorite }: HomeProps) {
   const [email, setEmail] = useState('');
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscribeStatus, setSubscribeStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -172,7 +171,6 @@ export default function Home({ products, onAddToCart, favorites, onToggleFavorit
               <ProductCard 
                 key={product.id} 
                 product={product} 
-                onAddToCart={onAddToCart} 
                 isFavorite={favorites.includes(product.id)}
                 onToggleFavorite={onToggleFavorite}
               />

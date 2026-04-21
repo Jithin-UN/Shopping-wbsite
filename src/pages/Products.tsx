@@ -1,23 +1,37 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { Product } from '../types';
+import { Product, Category } from '../types';
 import ProductCard from '../components/ProductCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'react-router-dom';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 interface ProductsProps {
   products: Product[];
-  onAddToCart: (product: Product) => void;
   favorites: string[];
   onToggleFavorite: (productId: string) => void;
 }
 
-export default function Products({ products, onAddToCart, favorites, onToggleFavorite }: ProductsProps) {
+export default function Products({ products, favorites, onToggleFavorite }: ProductsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'All');
   const [sortBy, setSortBy] = useState('newest');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [categories, setCategories] = useState<string[]>(['All']);
+
+  useEffect(() => {
+    const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cats = snapshot.docs.map(doc => (doc.data() as Category).name);
+      setCategories(['All', ...cats]);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'categories');
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const search = searchParams.get('search');
@@ -25,8 +39,6 @@ export default function Products({ products, onAddToCart, favorites, onToggleFav
     if (search !== null) setSearchQuery(search);
     if (category !== null) setSelectedCategory(category);
   }, [searchParams]);
-
-  const categories = ['All', ...new Set(products.map(p => p.category))];
 
   const filteredProducts = useMemo(() => {
     let result = products.filter(p => 
@@ -150,7 +162,6 @@ export default function Products({ products, onAddToCart, favorites, onToggleFav
             <ProductCard 
               key={product.id} 
               product={product} 
-              onAddToCart={onAddToCart} 
               isFavorite={favorites.includes(product.id)}
               onToggleFavorite={onToggleFavorite}
             />

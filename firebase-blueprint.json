@@ -10,11 +10,23 @@
         "description": { "type": "string" },
         "price": { "type": "number" },
         "category": { "type": "string" },
+        "sizes": { "type": "array", "items": { "type": "string" } },
         "imageUrl": { "type": "string" },
         "stock": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "price", "category", "imageUrl", "stock"]
+      "required": ["name", "price", "category", "imageUrl", "stock", "sizes"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
     },
     "Order": {
       "title": "Order",
@@ -94,6 +106,10 @@
     "/subscribers/{email}": {
       "schema": "Subscriber",
       "description": "Newsletter subscribers"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
     }
   }
 }

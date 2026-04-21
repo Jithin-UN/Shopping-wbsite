@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, ArrowLeft, Star, Truck, ShieldCheck, RefreshCcw, Heart, Share2 } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Star, Truck, ShieldCheck, RefreshCcw, Heart, Share2, Info } from 'lucide-react';
 import { Product } from '../types';
 import { motion } from 'motion/react';
 
 interface ProductDetailsProps {
   products: Product[];
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, selectedSize: string) => void;
   favorites: string[];
   onToggleFavorite: (productId: string) => void;
 }
@@ -15,6 +16,8 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
   const navigate = useNavigate();
   const product = products.find(p => p.id === id);
   const isFavorite = id ? favorites.includes(id) : false;
+  const [selectedSize, setSelectedSize] = useState('');
+  const [showSizeError, setShowSizeError] = useState(false);
 
   const handleShare = async () => {
     if (!product) return;
@@ -35,6 +38,16 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
     } catch (err) {
       console.error('Error sharing:', err);
     }
+  };
+
+  const handleAddToCart = () => {
+    if (!product) return;
+    if (!selectedSize) {
+      setShowSizeError(true);
+      return;
+    }
+    setShowSizeError(false);
+    onAddToCart(product, selectedSize);
   };
 
   if (!product) {
@@ -115,9 +128,46 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
             ₹{product.price.toLocaleString('en-IN')}
           </div>
 
-          <p className="text-lg text-gray-600 leading-relaxed mb-10">
+          <p className="text-lg text-gray-600 leading-relaxed mb-8">
             {product.description || "Experience the perfect blend of style and comfort with this exquisite dress. Handcrafted with premium materials, it's designed to make you stand out at any event."}
           </p>
+
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Select Size</h3>
+              <button 
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 underline flex items-center"
+                onClick={() => alert("Size Guide coming soon!")}
+              >
+                <Info size={14} className="mr-1" />
+                Size Guide
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {(product.sizes || []).map(size => (
+                <button
+                  key={size}
+                  onClick={() => {
+                    setSelectedSize(size);
+                    setShowSizeError(false);
+                  }}
+                  className={`w-14 h-14 flex items-center justify-center rounded-xl font-bold transition-all border-2 ${
+                    selectedSize === size
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100 scale-110'
+                      : 'bg-white border-gray-100 text-gray-600 hover:border-indigo-200 hover:text-indigo-600'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+            {showSizeError && (
+              <p className="text-red-500 text-xs font-bold mt-3 flex items-center">
+                <Info size={12} className="mr-1" />
+                Please select a size to continue
+              </p>
+            )}
+          </div>
 
           <div className="space-y-6 mb-12">
             <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
@@ -142,7 +192,7 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
 
           <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
             <button
-              onClick={() => onAddToCart(product)}
+              onClick={handleAddToCart}
               disabled={product.stock <= 0}
               className={`flex-grow px-8 py-5 rounded-2xl font-bold text-lg flex items-center justify-center space-x-3 transition-all transform hover:scale-[1.02] shadow-xl shadow-indigo-100 ${
                 product.stock > 0 

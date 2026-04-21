@@ -4,10 +4,17 @@ export interface Product {
   description?: string;
   price: number;
   category: string;
+  sizes: string[];
   imageUrl: string;
   stock: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface UserProfile {
@@ -31,6 +38,7 @@ export interface CartItem {
   price: number;
   imageUrl: string;
   quantity: number;
+  selectedSize: string;
 }
 
 export interface Order {

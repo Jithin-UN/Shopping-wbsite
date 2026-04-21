@@ -6,12 +6,11 @@ import { motion } from 'motion/react';
 
 interface ProductCardProps {
   product: Product;
-  onAddToCart: (product: Product) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (productId: string) => void;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, isFavorite = false, onToggleFavorite }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, isFavorite = false, onToggleFavorite }) => {
   return (
     <motion.div
       id={`product-card-${product.id}`}
@@ -39,13 +38,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, isFavor
           </button>
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onAddToCart(product)}
+          <Link
+            to={`/product/${product.id}`}
             className="w-full bg-white text-indigo-600 py-2 rounded-lg font-medium flex items-center justify-center space-x-2 hover:bg-indigo-50 active:scale-95 transition-colors"
           >
             <ShoppingCart size={18} />
-            <span>Add to Cart</span>
-          </button>
+            <span>Select Size</span>
+          </Link>
         </div>
       </div>
       <div className="p-4 flex flex-col flex-grow">

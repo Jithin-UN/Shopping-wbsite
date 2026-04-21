@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from 'motion/react';
 interface CartProps {
   cart: CartItem[];
   products: Product[];
-  updateQuantity: (productId: string, quantity: number) => void;
-  removeFromCart: (productId: string) => void;
+  updateQuantity: (productId: string, selectedSize: string, quantity: number) => void;
+  removeFromCart: (productId: string, selectedSize: string) => void;
 }
 
 export default function Cart({ cart, products, updateQuantity, removeFromCart }: CartProps) {
@@ -48,7 +48,7 @@ export default function Cart({ cart, products, updateQuantity, removeFromCart }:
           <AnimatePresence>
             {cart.map(item => (
               <motion.div
-                key={item.productId}
+                key={`${item.productId}-${item.selectedSize}`}
                 layout
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -65,32 +65,35 @@ export default function Cart({ cart, products, updateQuantity, removeFromCart }:
                 </Link>
                 <div className="sm:ml-8 flex-grow text-center sm:text-left">
                   <Link to={`/product/${item.productId}`} className="hover:text-indigo-600 transition-colors">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{item.name}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-1">{item.name}</h3>
                   </Link>
-                  <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mb-4">
                     <p className="text-indigo-600 font-bold font-mono">₹{item.price.toLocaleString('en-IN')}</p>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">
+                    <span className="px-3 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full">
+                      Size: {item.selectedSize}
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-0.5 rounded">
                       Stock: {getProductStock(item.productId)}
                     </span>
                   </div>
                   <div className="flex items-center justify-center sm:justify-start space-x-4">
                     <div className="flex items-center bg-gray-50 rounded-xl p-1 border border-gray-100">
                       <button
-                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                        onClick={() => updateQuantity(item.productId, item.selectedSize, item.quantity - 1)}
                         className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
                       >
                         <Minus size={16} />
                       </button>
                       <span className="w-12 text-center font-bold text-gray-900">{item.quantity}</span>
                       <button
-                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.productId, item.selectedSize, item.quantity + 1)}
                         className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
                       >
                         <Plus size={16} />
                       </button>
                     </div>
                     <button
-                      onClick={() => removeFromCart(item.productId)}
+                      onClick={() => removeFromCart(item.productId, item.selectedSize)}
                       className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                     >
                       <Trash2 size={20} />

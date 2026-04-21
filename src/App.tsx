@@ -114,21 +114,23 @@ export default function App() {
   }, []);
 
   // Cart Management
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, selectedSize: string) => {
     if (!user) {
       setAuthModalMessage('Please login to add items to your cart and start shopping.');
       setIsAuthModalOpen(true);
       return;
     }
     setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.productId === product.id);
+      const cartKey = `${product.id}-${selectedSize}`;
+      const existingItem = prevCart.find(item => `${item.productId}-${item.selectedSize}` === cartKey);
+      
       if (existingItem) {
         if (existingItem.quantity + 1 > product.stock) {
           alert(`Only ${product.stock} units available in stock.`);
           return prevCart;
         }
         return prevCart.map(item =>
-          item.productId === product.id
+          `${item.productId}-${item.selectedSize}` === cartKey
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -142,18 +144,19 @@ export default function App() {
         name: product.name,
         price: product.price,
         imageUrl: product.imageUrl,
-        quantity: 1
+        quantity: 1,
+        selectedSize: selectedSize
       }];
     });
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prevCart => prevCart.filter(item => item.productId !== productId));
+  const removeFromCart = (productId: string, selectedSize: string) => {
+    setCart(prevCart => prevCart.filter(item => !(item.productId === productId && item.selectedSize === selectedSize)));
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = (productId: string, selectedSize: string, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(productId, selectedSize);
       return;
     }
 
@@ -165,7 +168,7 @@ export default function App() {
 
     setCart(prevCart =>
       prevCart.map(item =>
-        item.productId === productId ? { ...item, quantity } : item
+        (item.productId === productId && item.selectedSize === selectedSize) ? { ...item, quantity } : item
       )
     );
   };
@@ -222,7 +225,6 @@ export default function App() {
             <Route path="/" element={
               <Home 
                 products={products} 
-                onAddToCart={addToCart} 
                 favorites={user?.favorites || []}
                 onToggleFavorite={toggleFavorite}
               />
@@ -230,7 +232,6 @@ export default function App() {
             <Route path="/products" element={
               <Products 
                 products={products} 
-                onAddToCart={addToCart} 
                 favorites={user?.favorites || []}
                 onToggleFavorite={toggleFavorite}
               />
@@ -248,7 +249,6 @@ export default function App() {
                 <Favorites 
                   products={products} 
                   favorites={user.favorites || []} 
-                  onAddToCart={addToCart} 
                   onToggleFavorite={toggleFavorite} 
                 />
               ) : (

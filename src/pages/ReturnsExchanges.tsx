@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCcw, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 
 export default function ReturnsExchanges() {
@@ -68,12 +68,12 @@ export default function ReturnsExchanges() {
           <HelpCircle size={48} className="text-indigo-600 mx-auto mb-6" />
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Need More Help?</h2>
           <p className="text-gray-600 mb-8">Our customer support team is available 24/7 to assist you with any questions regarding returns or exchanges.</p>
-          <a 
-            href="/contact" 
+          <Link 
+            to="/contact" 
             className="inline-block px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
           >
             Contact Support
-          </a>
+          </Link>
         </section>
       </div>
     </div>
