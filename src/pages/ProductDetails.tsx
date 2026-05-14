@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, ArrowLeft, Star, Truck, ShieldCheck, RefreshCcw, Heart, Share2, Info } from 'lucide-react';
 import { Product } from '../types';
 import { motion } from 'motion/react';
+import ProductCard from '../components/ProductCard';
 
 interface ProductDetailsProps {
   products: Product[];
@@ -49,6 +50,10 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
     setShowSizeError(false);
     onAddToCart(product, selectedSize);
   };
+
+  const relatedProducts = products
+    .filter(p => p.category === product?.category && p.id !== product?.id)
+    .slice(0, 4);
 
   if (!product) {
     return (
@@ -206,6 +211,35 @@ export default function ProductDetails({ products, onAddToCart, favorites, onTog
           </div>
         </motion.div>
       </div>
+
+      {relatedProducts.length > 0 && (
+        <div className="mt-32">
+          <div className="flex items-center justify-between mb-12">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Related Products</h2>
+              <p className="text-gray-500 font-medium">You might also like these dresses in {product.category}.</p>
+            </div>
+            <Link 
+              to={`/products?category=${product.category}`}
+              className="text-indigo-600 font-bold hover:text-indigo-700 flex items-center group transition-colors"
+            >
+              View More 
+              <ShoppingCart size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+            {relatedProducts.map(rp => (
+              <ProductCard 
+                key={rp.id} 
+                product={rp} 
+                isFavorite={favorites.includes(rp.id)}
+                onToggleFavorite={onToggleFavorite}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
